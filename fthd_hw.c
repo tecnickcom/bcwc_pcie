@@ -1,19 +1,9 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation.
  *
  */
 
@@ -202,7 +192,7 @@ static int fthd_hw_ddr_phy_soft_reset(struct fthd_private *dev_priv)
 static inline int fthd_hw_ddr_status_busy(struct fthd_private *dev_priv,
 					  int retries, int delay)
 {
-	int reg, i;
+	int reg = 0, i;
 
 	for (i = 0; i < retries; i++) {
 		reg = FTHD_S2_REG_READ(S2_DDR_STATUS_2018);

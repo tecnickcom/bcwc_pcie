@@ -1,19 +1,9 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation.
  *
  */
 
@@ -575,9 +565,9 @@ int fthd_isp_cmd_set_loadfile(struct fthd_private *dev_priv)
 	}
 
 	if (!filename) {
-		pr_err("no set file for sensorid %04x %04x found\n",
-		       dev_priv->sensor_id0, dev_priv->sensor_id1);
-		return -EINVAL;
+		pr_debug("no set file for sensorid %04x %04x found\n",
+			 dev_priv->sensor_id0, dev_priv->sensor_id1);
+		return 0;
 	}
 
 	/* The set file is allowed to be missing but we don't get calibration */

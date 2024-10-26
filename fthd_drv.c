@@ -1,19 +1,9 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation.
  *
  */
 
@@ -21,6 +11,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
+#include <linux/pci-aspm.h>
+#endif
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
@@ -66,19 +60,19 @@ static int fthd_pci_reserve_mem(struct fthd_private *dev_priv)
 	/* S2 IO */
 	start = pci_resource_start(dev_priv->pdev, FTHD_PCI_S2_IO);
 	len = pci_resource_len(dev_priv->pdev, FTHD_PCI_S2_IO);
-	dev_priv->s2_io = ioremap_nocache(start, len);
+	dev_priv->s2_io = ioremap(start, len);
 	dev_priv->s2_io_len = len;
 
 	/* S2 MEM */
 	start = pci_resource_start(dev_priv->pdev, FTHD_PCI_S2_MEM);
 	len = pci_resource_len(dev_priv->pdev, FTHD_PCI_S2_MEM);
-	dev_priv->s2_mem = ioremap_nocache(start, len);
+	dev_priv->s2_mem = ioremap(start, len);
 	dev_priv->s2_mem_len = len;
 
 	/* ISP IO */
 	start = pci_resource_start(dev_priv->pdev, FTHD_PCI_ISP_IO);
 	len = pci_resource_len(dev_priv->pdev, FTHD_PCI_ISP_IO);
-	dev_priv->isp_io = ioremap_nocache(start, len);
+	dev_priv->isp_io = ioremap(start, len);
 	dev_priv->isp_io_len = len;
 
 	pr_debug("Allocated S2 regs (BAR %d). %u bytes at 0x%p\n",
@@ -376,6 +370,10 @@ static int fthd_pci_init(struct fthd_private *dev_priv)
 		return ret;
 	}
 
+	/* ASPM must be disabled on the device or it hangs while streaming */
+	pci_disable_link_state(pdev, PCIE_LINK_STATE_L0S | PCIE_LINK_STATE_L1 |
+			       PCIE_LINK_STATE_CLKPM);
+
 	ret = fthd_pci_reserve_mem(dev_priv);
 	if (ret)
 		goto fail_enable;
@@ -398,7 +396,11 @@ static int fthd_pci_init(struct fthd_private *dev_priv)
 		goto fail_irq;
 
 	dev_info(&pdev->dev, "Setting %ubit DMA mask\n", dev_priv->dma_mask);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,18,0)
 	pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(dev_priv->dma_mask));
+#else
+	dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(dev_priv->dma_mask));
+#endif
 
 	pci_set_master(pdev);
 	pci_set_drvdata(pdev, dev_priv);
@@ -540,6 +542,7 @@ static struct pci_driver fthd_pci_driver = {
 	.name = KBUILD_MODNAME,
 	.probe = fthd_pci_probe,
 	.remove = fthd_pci_remove,
+	.shutdown = fthd_pci_remove,
 	.id_table = fthd_pci_id_table,
 #ifdef CONFIG_PM
 	.suspend = fthd_pci_suspend,
@@ -549,6 +552,8 @@ static struct pci_driver fthd_pci_driver = {
 
 module_pci_driver(fthd_pci_driver);
 
+MODULE_FIRMWARE("facetimehd/firmware.bin");
+MODULE_DEVICE_TABLE(pci, fthd_pci_id_table);
 MODULE_AUTHOR("Patrik Jakobsson <patrik.r.jakobsson@gmail.com>");
 MODULE_DESCRIPTION("FacetimeHD camera driver");
 MODULE_LICENSE("GPL");

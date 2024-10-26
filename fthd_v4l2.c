@@ -1,19 +1,9 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2015 Sven Schnelle <svens@stackframe.org>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation.
  *
  */
 
@@ -41,6 +31,10 @@
 #define FTHD_MIN_HEIGHT 240
 #define FTHD_NUM_FORMATS 2 /* NV16 is disabled for now */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+# define VFL_TYPE_VIDEO VFL_TYPE_GRABBER
+#endif
+
 static int fthd_buffer_queue_setup(
     struct vb2_queue *vq,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,4,0)
@@ -52,7 +46,11 @@ static int fthd_buffer_queue_setup(
     unsigned int *nbuffers,
     unsigned int *nplanes,
     unsigned int sizes[],
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,8,0)
+    struct device *alloc_devs[]
+#else
     void *alloc_ctxs[]
+#endif
 ) {
 
 	struct fthd_private *dev_priv = vb2_get_drv_priv(vq);
@@ -70,7 +68,11 @@ static int fthd_buffer_queue_setup(
 	/* FIXME: We assume single plane format here but not below */
 	for (i = 0; i < *nplanes; i++) {
 		sizes[i] = cur_fmt->sizeimage;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,8,0)
+		alloc_devs[i] = &dev_priv->pdev->dev;
+#else
 		alloc_ctxs[i] = dev_priv->alloc_ctx;
+#endif
 		total_size += sizes[i];
 	}
 
@@ -538,13 +540,10 @@ static int fthd_v4l2_ioctl_enum_framesizes(struct file *filp, void *priv,
 	    sizes->pixel_format != V4L2_PIX_FMT_YVYU)
 		return -EINVAL;
 
-	sizes->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-	sizes->stepwise.min_width = FTHD_MIN_WIDTH;
-	sizes->stepwise.max_width = FTHD_MAX_WIDTH;
-	sizes->stepwise.min_height = FTHD_MIN_HEIGHT;
-	sizes->stepwise.max_height = FTHD_MAX_HEIGHT;
-	sizes->stepwise.step_width = 8;
-	sizes->stepwise.step_height = 1;
+	sizes->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+	sizes->discrete.width = FTHD_MAX_WIDTH;
+	sizes->discrete.height = FTHD_MAX_HEIGHT;
+
 	return 0;
 }
 
@@ -566,13 +565,10 @@ static int fthd_v4l2_ioctl_enum_frameintervals(struct file *filp, void *priv,
 	    || interval->height > FTHD_MAX_HEIGHT)
 		return -EINVAL;
 
-	interval->type = V4L2_FRMIVAL_TYPE_STEPWISE;
-	interval->stepwise.step.numerator = 1;
-	interval->stepwise.step.denominator = 1000;
-	interval->stepwise.min.numerator = 33;
-	interval->stepwise.min.denominator = 1000;
-	interval->stepwise.max.numerator = 500;
-	interval->stepwise.max.denominator = 1000;
+	interval->type = V4L2_FRMIVAL_TYPE_DISCRETE;
+	interval->discrete.numerator = 1;
+	interval->discrete.denominator = 30;
+
 	return 0;
 }
 
@@ -687,7 +683,11 @@ int fthd_v4l2_register(struct fthd_private *dev_priv)
 	q->mem_ops = &vb2_dma_sg_memops;
 	q->buf_struct_size = 0;//sizeof(struct vpif_cap_buffer);
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,8,0)
 	q->min_buffers_needed = 1;
+#else
+	q->min_queued_buffers = 1;
+#endif
 	q->lock = &dev_priv->vb2_queue_lock;
 
 	ret = vb2_queue_init(q);
@@ -711,7 +711,9 @@ int fthd_v4l2_register(struct fthd_private *dev_priv)
 		v4l2_ctrl_handler_free(&dev_priv->v4l2_ctrl_handler);
 		goto fail;
 	}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
 	dev_priv->alloc_ctx = vb2_dma_sg_init_ctx(&dev_priv->pdev->dev);
+#endif
 	vdev->v4l2_dev = v4l2_dev;
 	strcpy(vdev->name, "Apple Facetime HD"); // XXX: Length?
 	vdev->vfl_dir = VFL_DIR_RX;
@@ -720,8 +722,12 @@ int fthd_v4l2_register(struct fthd_private *dev_priv)
 	vdev->queue = q;
 	vdev->release = video_device_release;
 	vdev->ctrl_handler = &dev_priv->v4l2_ctrl_handler;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_READWRITE |
+			    V4L2_CAP_STREAMING;
+#endif
 	video_set_drvdata(vdev, dev_priv);
-	ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret) {
 		video_device_release(vdev);
 		goto fail_vdev;
@@ -746,7 +752,9 @@ void fthd_v4l2_unregister(struct fthd_private *dev_priv)
 {
 
 	v4l2_ctrl_handler_free(&dev_priv->v4l2_ctrl_handler);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
 	vb2_dma_sg_cleanup_ctx(dev_priv->alloc_ctx);
+#endif
 	video_unregister_device(dev_priv->videodev);
 	v4l2_device_unregister(&dev_priv->v4l2_dev);
 }

@@ -1,19 +1,9 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
  * FacetimeHD camera driver
  *
  * Copyright (C) 2014 Patrik Jakobsson (patrik.r.jakobsson@gmail.com)
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation.
  *
  */
 
@@ -24,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>
+#include <linux/version.h>
 #include <media/videobuf2-dma-sg.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
@@ -118,7 +109,9 @@ struct fthd_private {
 	struct vb2_queue vb2_queue;
 	struct mutex vb2_queue_lock;
 	struct list_head buffer_queue;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0)
 	struct vb2_alloc_ctx *alloc_ctx;
+#endif
 	struct h2t_buf_ctx h2t_bufs[FTHD_BUFFERS];
 
 	struct v4l2_ctrl_handler v4l2_ctrl_handler;
